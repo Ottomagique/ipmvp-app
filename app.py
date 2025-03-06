@@ -1,5 +1,8 @@
 import streamlit as st
-
+import streamlit as st
+import pandas as pd  # Ajoutez cette ligne
+import numpy as np   # Ajoutez aussi cette ligne si vous l'utilisez
+# Autres imports...
 # Configuration de la page
 st.set_page_config(
     page_title="Analyse IPMVP avec Météo",
