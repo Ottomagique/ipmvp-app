@@ -1,11 +1,4 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import io
-import os
-from datetime import datetime
 
 # Configuration de la page
 st.set_page_config(
@@ -14,15 +7,51 @@ st.set_page_config(
     layout="wide"
 )
 
-# Fonction pour charger les données
-@st.cache_data
-def load_data(file):
-    try:
-        return pd.read_excel(file)
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier: {e}")
-        return None
+# Fonction d'authentification
+def check_password():
+    """Retourne True si l'utilisateur a entré le bon mot de passe"""
+    if "authentication_status" in st.session_state:
+        return st.session_state["authentication_status"]
+        
+    st.title("Connexion à l'application IPMVP")
+    
+    # Cet espace fait de la place pour la zone de login
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    
+    # Centrer le formulaire de login
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.subheader("Veuillez vous connecter")
+        username = st.text_input("Nom d'utilisateur", key="username")
+        password = st.text_input("Mot de passe", type="password", key="password")
+        
+        if st.button("Connexion"):
+            # Vérifier si secrets est disponible (déploiement)
+            try:
+                if username in st.secrets["passwords"] and password == st.secrets["passwords"][username]:
+                    st.session_state["authentication_status"] = True
+                    st.rerun()
+                else:
+                    st.error("Nom d'utilisateur ou mot de passe incorrect")
+            except Exception as e:
+                st.error(f"Erreur d'authentification: {e}")
+                # Mode développement - accepter des identifiants par défaut
+                if username == "admin" and password == "admin":
+                    st.warning("Mode développement: utilisation des identifiants par défaut")
+                    st.session_state["authentication_status"] = True
+                    st.rerun()
+                else:
+                    st.error("Nom d'utilisateur ou mot de passe incorrect")
+    
+    return False
 
+# Vérifier l'authentification avant d'afficher l'application
+if not check_password():
+    st.stop()  # Arrête l'exécution de l'application si non authentifié
+
+# Le reste de votre code d'application commence ici
+# Titre de l'application
 # Titre de l'application
 st.title("📊 Analyse IPMVP avec Données Météo")
 st.markdown("""
