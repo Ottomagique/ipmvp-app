@@ -14,7 +14,6 @@ import pickle
 import os
 from datetime import datetime, timedelta
 import base64
-import scipy.stats as stats  # Ajouté pour les calculs statistiques t-test
 
 # 📌 Configuration de la page
 st.set_page_config(
@@ -106,6 +105,9 @@ def check_credentials(username, password):
 def is_admin(username):
     users = init_user_db()
     return username in users and users[username]['is_admin']
+
+# Voici la modification à apporter à la fonction show_login_form()
+# Remplacez la partie problématique par cette version corrigée :
 
 def show_login_form():
     # Définir l'interface utilisateur avec les styles
@@ -298,96 +300,6 @@ if st.session_state.get('show_admin', False) and st.session_state.get('is_admin'
 ###################################
 # SYSTÈME D'AUTHENTIFICATION - FIN
 ###################################
-# NOUVELLES FONCTIONS POUR AMÉLIORER L'AFFICHAGE ET CALCULER LES STATISTIQUES T
-
-# Fonction pour calculer les valeurs t-stat pour les coefficients
-def calculate_t_stats(X, y, model, coefs):
-    """
-    Calcule les valeurs t-stat pour les coefficients de régression.
-    
-    Parameters:
-    X (pandas.DataFrame): Variables explicatives
-    y (pandas.Series): Variable cible
-    model: Modèle de régression ajusté
-    coefs (dict): Dictionnaire des coefficients
-    
-    Returns:
-    dict: Dictionnaire des valeurs t-stat et p-values pour chaque variable
-    """
-    # Ne s'applique qu'aux modèles linéaires standards
-    if not hasattr(model, 'coef_'):
-        # Pour les modèles non standards comme les polynomiaux via Pipeline
-        return {feature: None for feature in coefs.keys()}
-    
-    # Calcul des prédictions et des résidus
-    y_pred = model.predict(X)
-    residuals = y - y_pred
-    
-    # Degrés de liberté et MSE
-    n = len(y)
-    p = len(model.coef_)
-    df = n - p - 1
-    if df <= 0:  # Éviter division par zéro ou valeurs négatives
-        return {feature: None for feature in coefs.keys()}
-        
-    mse = np.sum(residuals ** 2) / df
-    
-    # Calcul de la matrice (X'X)^-1
-    try:
-        # Pour les modèles de régression linéaire standard
-        X_matrix = X.values
-        XtX_inv = np.linalg.inv(np.dot(X_matrix.T, X_matrix))
-        
-        # Erreurs standard
-        se = np.sqrt(np.diag(XtX_inv) * mse)
-        
-        # Calcul des valeurs t
-        t_stats = model.coef_ / se
-        
-        # Calcul des p-values
-        p_values = [2 * (1 - stats.t.cdf(abs(t), df)) for t in t_stats]
-        
-        # Créer un dictionnaire des valeurs t et p-values
-        result = {}
-        for i, feature in enumerate(X.columns):
-            result[feature] = {
-                't_value': t_stats[i],
-                'p_value': p_values[i],
-                'significant': p_values[i] < 0.05  # Significatif au niveau 5%
-            }
-        
-        return result
-    except:
-        # En cas d'erreur, retourner None pour toutes les variables
-        return {feature: None for feature in X.columns}
-
-# Fonction pour formater l'équation en ignorant les coefficients proches de zéro
-def format_equation(intercept, coefficients, threshold=1e-4):
-    """
-    Formate l'équation du modèle en ignorant les coefficients proches de zéro.
-    
-    Parameters:
-    intercept (float): Terme constant du modèle
-    coefficients (dict): Dictionnaire des coefficients
-    threshold (float): Seuil en dessous duquel un coefficient est considéré comme nul
-    
-    Returns:
-    str: Équation formatée
-    """
-    equation = f"Consommation = {intercept:.4f}"
-    
-    # Trier les coefficients par valeur absolue décroissante pour un meilleur affichage
-    sorted_coefs = sorted(coefficients.items(), key=lambda x: abs(x[1]), reverse=True)
-    
-    for feature, coef in sorted_coefs:
-        # Ne pas inclure les coefficients proches de zéro
-        if abs(coef) < threshold:
-            continue
-            
-        sign = "+" if coef >= 0 else ""
-        equation += f" {sign} {coef:.4f} × {feature}"
-    
-    return equation
 
 # Fonction pour détecter automatiquement les colonnes de date et de consommation
 def detecter_colonnes(df):
@@ -460,9 +372,9 @@ def detecter_colonnes(df):
     
     return date_col_guess, conso_col_guess
 
-# Fonction pour créer une info-bulle (mise à jour pour décaler les bulles à droite)
+# Fonction pour créer une info-bulle
 def tooltip(text, explanation):
-    return f'<span>{text} <span class="tooltip">ℹ️<span class="tooltiptext tooltip-right">{explanation}</span></span></span>'
+    return f'<span>{text} <span class="tooltip">ℹ️<span class="tooltiptext">{explanation}</span></span></span>'
 
 # Fonction pour évaluer la conformité IPMVP
 def evaluer_conformite(r2, cv_rmse):
@@ -473,31 +385,6 @@ def evaluer_conformite(r2, cv_rmse):
     else:
         return "Insuffisante", "bad"
 
-# Fonction sécurisée pour formater les valeurs numériques (ajoutée pour éviter les erreurs)
-def format_value(value, fmt=".4f", default="N/A"):
-    """
-    Formate une valeur numérique de manière sécurisée.
-    
-    Parameters:
-    value: Valeur à formater
-    fmt (str): Format à appliquer (par défaut ".4f")
-    default (str): Valeur par défaut si la conversion échoue
-    
-    Returns:
-    str: Valeur formatée ou valeur par défaut
-    """
-    if value is None:
-        return default
-    
-    try:
-        if isinstance(value, (int, float)):
-            return f"{value:{fmt}}"
-        elif isinstance(value, dict) and 't_value' in value and isinstance(value['t_value'], (int, float)):
-            return f"{value['t_value']:{fmt}}"
-        return default
-    except:
-        return default
-        
 # 🔹 Appliquer le CSS (Uniquement pour améliorer le design)
 st.markdown("""
     <style>
@@ -661,23 +548,6 @@ st.markdown("""
         opacity: 1;
     }
     
-    /* Style pour les info-bulles à droite */
-    .tooltip-right {
-        left: 100% !important;
-        margin-left: 10px !important;
-        bottom: 0 !important;
-    }
-
-    .tooltip-right::after {
-        top: 50% !important;
-        left: -5px !important;
-        margin-left: 0 !important;
-        margin-top: -5px !important;
-        border-width: 5px !important;
-        border-style: solid !important;
-        border-color: transparent #00485F transparent transparent !important;
-    }
-    
     .model-badge {
         display: inline-block;
         background-color: #6DBABC;
@@ -688,58 +558,8 @@ st.markdown("""
         font-weight: bold;
         margin-left: 8px;
     }
-
-    /* Style pour les tableaux de données statistiques */
-    .stats-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin: 15px 0;
-        border-radius: 5px;
-        overflow: hidden;
-    }
-    
-    .stats-table th {
-        background-color: #00485F;
-        color: white;
-        padding: 8px 12px;
-        text-align: left;
-        font-weight: 600;
-    }
-    
-    .stats-table td {
-        padding: 8px 12px;
-        border-bottom: 1px solid #e0e0e0;
-    }
-    
-    .stats-table tr:nth-child(even) {
-        background-color: rgba(109, 186, 188, 0.1);
-    }
-    
-    .stats-table tr:hover {
-        background-color: rgba(150, 185, 29, 0.1);
-    }
-    
-    /* Style pour les badges de significativité */
-    .significance-badge {
-        display: inline-block;
-        padding: 2px 6px;
-        border-radius: 3px;
-        font-size: 11px;
-        font-weight: bold;
-    }
-    
-    .significant {
-        background-color: #96B91D;
-        color: white;
-    }
-    
-    .not-significant {
-        background-color: #e74c3c;
-        color: white;
-    }
     </style>
     """, unsafe_allow_html=True)
-
 # 📌 **Description de l'application**
 st.title("📊 Calcul IPMVP")
 st.markdown("""
@@ -794,7 +614,8 @@ with col1:
 
 with col2:
     lancer_calcul = st.button("🚀 Lancer le calcul", use_container_width=True)
-    # Traitement du fichier importé
+
+# Traitement du fichier importé
 if uploaded_file:
     try:
         df = pd.read_excel(uploaded_file)  # Chargement du fichier
@@ -976,7 +797,7 @@ st.sidebar.markdown(f"""
 Les modèles sont évalués selon les critères IPMVP :
 - R² ≥ 0.75 : Excellente corrélation
 - CV(RMSE) ≤ 15% : Excellente précision
-- {tooltip("Biais < 5%", "Le biais représente l'erreur systématique du modèle en pourcentage. Un biais faible (< 5%) indique que le modèle ne surestime ni ne sous-estime systématiquement les valeurs, ce qui est essentiel pour la fiabilité des économies calculées.")} : Ajustement équilibré
+- {tooltip("Biais < 5%", "Le biais représente l'erreur systématique du modèle. Un biais faible (< 5%) indique que le modèle ne surestime ni ne sous-estime systématiquement les valeurs, ce qui est essentiel pour la fiabilité des économies calculées.")} : Ajustement équilibré
 """, unsafe_allow_html=True)
 
 # Information sur les types de régression
@@ -996,6 +817,7 @@ st.markdown("""
     <p>Outil d'analyse et de modélisation énergétique conforme IPMVP</p>
 </div>
 """, unsafe_allow_html=True)
+
 # 📌 **Lancement du calcul seulement si le bouton est cliqué**
 if df is not None and lancer_calcul:
     st.subheader("⚙️ Analyse en cours...")
@@ -1083,72 +905,64 @@ if df is not None and lancer_calcul:
                             ]
                             
                             for m_type, m_obj, m_name in model_types_to_test:
-                                try:
-                                    m_obj.fit(X_subset, y)
-                                    y_pred = m_obj.predict(X_subset)
-                                    r2 = r2_score(y, y_pred)
+                                m_obj.fit(X_subset, y)
+                                y_pred = m_obj.predict(X_subset)
+                                r2 = r2_score(y, y_pred)
+                                
+                                # Calcul des métriques
+                                rmse = np.sqrt(mean_squared_error(y, y_pred))
+                                mae = mean_absolute_error(y, y_pred)
+                                cv_rmse = rmse / np.mean(y) if np.mean(y) != 0 else float('inf')
+                                bias = np.mean(y_pred - y) / np.mean(y) * 100
+                                
+                                # Récupération des coefficients selon le type de modèle
+                                if m_type == "Linéaire":
+                                    coefs = {feature: coef for feature, coef in zip(combo, m_obj.coef_)}
+                                    intercept = m_obj.intercept_
+                                elif m_type in ["Ridge", "Lasso"]:
+                                    coefs = {feature: coef for feature, coef in zip(combo, m_obj.coef_)}
+                                    intercept = m_obj.intercept_
+                                elif m_type == "Polynomiale":
+                                    # Pour le modèle polynomial, nous gardons une représentation simplifiée
+                                    linear_model = m_obj.named_steps['linear']
+                                    poly = m_obj.named_steps['poly']
+                                    feature_names = poly.get_feature_names_out(input_features=combo)
+                                    coefs = {name: coef for name, coef in zip(feature_names, linear_model.coef_)}
+                                    intercept = linear_model.intercept_
+                                
+                                # Statut de conformité IPMVP
+                                conformite, classe = evaluer_conformite(r2, cv_rmse)
+                                
+                                # Ajouter le modèle à la liste de tous les modèles testés
+                                model_info = {
+                                    'features': list(combo),
+                                    'r2': r2,
+                                    'rmse': rmse,
+                                    'cv_rmse': cv_rmse,
+                                    'mae': mae,
+                                    'bias': bias,
+                                    'coefficients': coefs,
+                                    'intercept': intercept,
+                                    'conformite': conformite,
+                                    'classe': classe,
+                                    'model_type': m_type,
+                                    'model_name': m_name,
+                                    'period': period_name
+                                }
+                                all_models.append(model_info)
+                                
+                                # Mettre à jour le meilleur modèle si nécessaire
+                                if r2 > best_period_r2:
+                                    best_period_r2 = r2
+                                    best_period_start = period_start
+                                    best_period_end = period_end
+                                    best_period_name = period_name
+                                    best_period_data = period_df
+                                    best_period_model = m_obj
+                                    best_period_features = list(combo)
                                     
-                                    # Calcul des métriques
-                                    rmse = np.sqrt(mean_squared_error(y, y_pred))
-                                    mae = mean_absolute_error(y, y_pred)
-                                    cv_rmse = rmse / np.mean(y) if np.mean(y) != 0 else float('inf')
-                                    bias = np.mean(y_pred - y) / np.mean(y) * 100
-                                    
-                                    # Récupération des coefficients selon le type de modèle
-                                    if m_type == "Linéaire":
-                                        coefs = {feature: coef for feature, coef in zip(combo, m_obj.coef_)}
-                                        intercept = m_obj.intercept_
-                                    elif m_type in ["Ridge", "Lasso"]:
-                                        coefs = {feature: coef for feature, coef in zip(combo, m_obj.coef_)}
-                                        intercept = m_obj.intercept_
-                                    elif m_type == "Polynomiale":
-                                        # Pour le modèle polynomial, nous gardons une représentation simplifiée
-                                        linear_model = m_obj.named_steps['linear']
-                                        poly = m_obj.named_steps['poly']
-                                        feature_names = poly.get_feature_names_out(input_features=combo)
-                                        coefs = {name: coef for name, coef in zip(feature_names, linear_model.coef_)}
-                                        intercept = linear_model.intercept_
-                                    
-                                    # Calcul des valeurs t de Student
-                                    t_stats = calculate_t_stats(X_subset, y, m_obj, coefs) if m_type in ["Linéaire", "Ridge", "Lasso"] else {feature: None for feature in combo}
-                                    
-                                    # Statut de conformité IPMVP
-                                    conformite, classe = evaluer_conformite(r2, cv_rmse)
-                                    
-                                    # Ajouter le modèle à la liste de tous les modèles testés
-                                    model_info = {
-                                        'features': list(combo),
-                                        'r2': r2,
-                                        'rmse': rmse,
-                                        'cv_rmse': cv_rmse,
-                                        'mae': mae,
-                                        'bias': bias,
-                                        'coefficients': coefs,
-                                        'intercept': intercept,
-                                        'conformite': conformite,
-                                        'classe': classe,
-                                        'model_type': m_type,
-                                        'model_name': m_name,
-                                        'period': period_name,
-                                        't_stats': t_stats
-                                    }
-                                    all_models.append(model_info)
-                                    
-                                    # Mettre à jour le meilleur modèle si nécessaire
-                                    if r2 > best_period_r2:
-                                        best_period_r2 = r2
-                                        best_period_start = period_start
-                                        best_period_end = period_end
-                                        best_period_name = period_name
-                                        best_period_data = period_df
-                                        best_period_model = m_obj
-                                        best_period_features = list(combo)
-                                        
-                                        # Stockage des métriques du meilleur modèle
-                                        best_period_metrics = model_info
-                                except Exception as e:
-                                    # Gestion des erreurs
-                                    continue
+                                    # Stockage des métriques du meilleur modèle
+                                    best_period_metrics = model_info
                         else:
                             # Création du modèle selon le type sélectionné
                             if model_type == "Linéaire":
@@ -1194,9 +1008,6 @@ if df is not None and lancer_calcul:
                                 coefs = {name: coef for name, coef in zip(feature_names, linear_model.coef_)}
                                 intercept = linear_model.intercept_
                             
-                            # Calcul des valeurs t de Student
-                            t_stats = calculate_t_stats(X_subset, y, model, coefs) if model_type in ["Linéaire", "Ridge", "Lasso"] else {feature: None for feature in combo}
-                            
                             # Statut de conformité IPMVP
                             conformite, classe = evaluer_conformite(r2, cv_rmse)
                             
@@ -1214,8 +1025,7 @@ if df is not None and lancer_calcul:
                                 'classe': classe,
                                 'model_type': model_type,
                                 'model_name': model_name,
-                                'period': period_name,
-                                't_stats': t_stats
+                                'period': period_name
                             }
                             all_models.append(model_info)
                             
@@ -1334,9 +1144,6 @@ if df is not None and lancer_calcul:
                                 coefs = {name: coef for name, coef in zip(feature_names, linear_model.coef_)}
                                 intercept = linear_model.intercept_
                             
-                            # Calcul des valeurs t de Student
-                            t_stats = calculate_t_stats(X_subset, y, m_obj, coefs) if m_type in ["Linéaire", "Ridge", "Lasso"] else {feature: None for feature in combo}
-                            
                             # Statut de conformité IPMVP
                             conformite, classe = evaluer_conformite(r2, cv_rmse)
                             
@@ -1354,8 +1161,7 @@ if df is not None and lancer_calcul:
                                 'classe': classe,
                                 'model_type': m_type,
                                 'model_name': m_name,
-                                'period': 'selected',
-                                't_stats': t_stats
+                                'period': 'selected'
                             }
                             all_models.append(model_info)
                             
@@ -1368,6 +1174,7 @@ if df is not None and lancer_calcul:
                         except Exception as e:
                             # st.warning(f"Erreur lors de l'analyse : {str(e)}")
                             continue
+                
                 else:
                     # Création du modèle selon le type sélectionné
                     try:
@@ -1414,9 +1221,6 @@ if df is not None and lancer_calcul:
                             coefs = {name: coef for name, coef in zip(feature_names, linear_model.coef_)}
                             intercept = linear_model.intercept_
                         
-                        # Calcul des valeurs t de Student
-                        t_stats = calculate_t_stats(X_subset, y, model, coefs) if model_type in ["Linéaire", "Ridge", "Lasso"] else {feature: None for feature in combo}
-                        
                         # Statut de conformité IPMVP
                         conformite, classe = evaluer_conformite(r2, cv_rmse)
                         
@@ -1434,8 +1238,7 @@ if df is not None and lancer_calcul:
                             'classe': classe,
                             'model_type': model_type,
                             'model_name': model_name,
-                            'period': 'selected',
-                            't_stats': t_stats
+                            'period': 'selected'
                         }
                         all_models.append(model_info)
                         
@@ -1456,6 +1259,13 @@ if df is not None and lancer_calcul:
     if best_model:
         st.success("✅ Modèle trouvé avec succès !")
         
+        # Créer l'équation du modèle sous forme de texte
+        equation = f"Consommation = {best_metrics['intercept']:.4f}"
+        for feature in best_features:
+            coef = best_metrics['coefficients'][feature]
+            sign = "+" if coef >= 0 else ""
+            equation += f" {sign} {coef:.4f} × {feature}"
+        
         # Afficher les métriques dans un tableau
         col1, col2 = st.columns(2)
         
@@ -1469,11 +1279,18 @@ if df is not None and lancer_calcul:
             </div>
             """, unsafe_allow_html=True)
             
-            # Créer l'équation adaptée selon le type de modèle en utilisant la nouvelle fonction
+            # Créer l'équation adaptée selon le type de modèle
             if best_metrics['model_type'] in ["Linéaire", "Ridge", "Lasso"]:
-                equation = format_equation(best_metrics['intercept'], {feature: best_metrics['coefficients'][feature] for feature in best_features})
+                equation = f"Consommation = {best_metrics['intercept']:.4f}"
+                for feature in best_features:
+                    coef = best_metrics['coefficients'][feature]
+                    sign = "+" if coef >= 0 else ""
+                    equation += f" {sign} {coef:.4f} × {feature}"
             elif best_metrics['model_type'] == "Polynomiale":
-                equation = format_equation(best_metrics['intercept'], best_metrics['coefficients'])
+                equation = f"Consommation = {best_metrics['intercept']:.4f}"
+                for feature_name, coef in best_metrics['coefficients'].items():
+                    sign = "+" if coef >= 0 else ""
+                    equation += f" {sign} {coef:.4f} × {feature_name}"
             
             st.markdown(f"""
             <div class="equation-box">
@@ -1483,9 +1300,9 @@ if df is not None and lancer_calcul:
             """, unsafe_allow_html=True)
             
         with col2:
-            # Tableau des métriques amélioré avec info-bulles
-            metrics_table = f"""
-            <table class="stats-table">
+            # Tableau des métriques avec info-bulles
+            st.markdown(f"""
+            <table style="width:100%">
                 <tr>
                     <th>Métrique</th>
                     <th>Valeur</th>
@@ -1510,83 +1327,8 @@ if df is not None and lancer_calcul:
                     <td>{tooltip("Biais (%)", "Représente l'erreur systématique du modèle en pourcentage. Un biais positif indique une surestimation, un biais négatif une sous-estimation.")}</td>
                     <td>{best_metrics['bias']:.2f}</td>
                 </tr>
-            """
-            
-            # Ajouter les valeurs t de Student au tableau principal des métriques
-            if 't_stats' in best_metrics and best_metrics['model_type'] in ["Linéaire", "Ridge", "Lasso"]:
-                t_values = []
-                for feature in best_features:
-                    if feature in best_metrics['t_stats'] and best_metrics['t_stats'][feature] is not None:
-                        t_val = best_metrics['t_stats'][feature]['t_value'] if isinstance(best_metrics['t_stats'][feature], dict) else best_metrics['t_stats'][feature]
-                        if t_val is not None and (isinstance(t_val, float) or isinstance(t_val, int)):
-                            t_values.append(abs(t_val))
-                
-                if t_values:
-                    avg_t = sum(t_values) / len(t_values)
-                    sig_count = sum(1 for t in t_values if t > 2)
-                    sig_pct = sig_count / len(t_values) * 100
-                    
-                    # CORRECTION: Séparation des appels à tooltip et des balises HTML
-                    metrics_table += "<tr><td>"
-                    metrics_table += tooltip("t moyen", "Moyenne des valeurs absolues de t de Student. Une valeur élevée indique des variables à forte significativité statistique.")
-                    metrics_table += f"</td><td>{avg_t:.2f}</td></tr>"
-                    
-                    metrics_table += "<tr><td>"
-                    metrics_table += tooltip("% Var. signif.", "Pourcentage de variables statistiquement significatives (|t| > 2). 100% indique que toutes les variables ont un impact significatif.")
-                    metrics_table += f"</td><td>{sig_pct:.0f}%</td></tr>"
-            
-            metrics_table += "</table>"
-            
-            # Ajouter tableau des valeurs t pour les modèles linéaires, Ridge et Lasso
-            if 't_stats' in best_metrics and best_metrics['model_type'] in ["Linéaire", "Ridge", "Lasso"]:
-                # CORRECTION: Séparation de la structure HTML et de la fonction tooltip
-                metrics_table += "<h4>Coefficients et valeurs t de Student</h4>"
-                metrics_table += "<table class=\"stats-table\">"
-                metrics_table += "<tr><th>Variable</th><th>Coefficient</th><th>"
-                metrics_table += tooltip("Valeur t", "La statistique t de Student mesure la significativité d'un coefficient. En général, une valeur |t| > 2 indique une significativité statistique à un niveau de confiance de 95%.")
-                metrics_table += "</th><th>Significatif</th></tr>"
-                
-                # Ajouter chaque variable et sa valeur t
-                has_valid_t_values = False
-                
-                for feature in best_features:
-                    coef = best_metrics['coefficients'][feature]
-                    
-                    # Vérifier si nous avons des statistiques t valides
-                    if feature in best_metrics['t_stats'] and best_metrics['t_stats'][feature] is not None:
-                        t_value = None
-                        if isinstance(best_metrics['t_stats'][feature], dict) and 't_value' in best_metrics['t_stats'][feature]:
-                            t_value = best_metrics['t_stats'][feature]['t_value']
-                        elif not isinstance(best_metrics['t_stats'][feature], dict):
-                            t_value = best_metrics['t_stats'][feature]
-                            
-                        # Formatage sécurisé de la valeur t
-                        if t_value is not None and (isinstance(t_value, float) or isinstance(t_value, int)):
-                            has_valid_t_values = True
-                            formatted_t = f"{t_value:.4f}"
-                            significant = abs(t_value) > 2
-                            significance_class = "significant" if significant else "not-significant"
-                            significance_label = "Oui" if significant else "Non"
-                        else:
-                            formatted_t = "N/A"
-                            significance_class = ""
-                            significance_label = "N/A"
-                        
-                        metrics_table += f"<tr><td>{feature}</td><td>{coef:.4f}</td><td>{formatted_t}</td>"
-                        metrics_table += f"<td><span class=\"significance-badge {significance_class}\">{significance_label}</span></td></tr>"
-                    else:
-                        metrics_table += f"<tr><td>{feature}</td><td>{coef:.4f}</td><td>N/A</td><td>N/A</td></tr>"
-                
-                metrics_table += "</table>"
-                
-                # Ajouter explication sur l'interprétation des valeurs t
-                if has_valid_t_values:
-                    # CORRECTION: Séparation de la structure HTML et des appels à tooltip
-                    metrics_table += "<div style=\"margin-top: 10px; font-size: 0.9em; color: #555;\"><p>"
-                    metrics_table += tooltip("Interprétation", "Une variable avec une valeur |t| > 2 est considérée comme statistiquement significative au niveau de confiance de 95%. Les variables non-significatives peuvent être retirées du modèle sans affecter significativement sa qualité.")
-                    metrics_table += " Les variables avec une valeur |t| élevée ont un impact plus significatif sur le modèle.</p></div>"
-            
-            st.markdown(metrics_table, unsafe_allow_html=True)
+            </table>
+            """, unsafe_allow_html=True)
         
         # 🔹 Graphique de consommation
         st.subheader("📈 Visualisation des résultats")
@@ -1733,32 +1475,6 @@ if df is not None and lancer_calcul:
               - Ne pas présenter de tendance ou de motif visible
               - Avoir une distribution équilibrée au-dessus et en-dessous de zéro
             """)
-            
-        # Ajout d'un expander pour expliquer les valeurs t de Student
-        with st.expander("📚 Comprendre les valeurs t de Student"):
-            st.markdown("""
-            ### Interprétation des valeurs t de Student
-            
-            La valeur t de Student est un indicateur statistique qui permet d'évaluer si un coefficient de régression est significativement différent de zéro.
-            
-            **Principe**
-            - La valeur t est calculée en divisant la valeur du coefficient par son erreur standard
-            - Elle mesure combien de fois l'erreur standard est contenue dans la valeur du coefficient
-            
-            **Interprétation**
-            - |t| > 2 : Le coefficient est statistiquement significatif (p-value < 0.05)
-            - |t| > 2.58 : Le coefficient est très significatif (p-value < 0.01)
-            - |t| > 3.29 : Le coefficient est extrêmement significatif (p-value < 0.001)
-            - |t| < 2 : Le coefficient n'est pas statistiquement significatif (p-value > 0.05)
-            
-            **Application pratique**
-            - Les variables avec des valeurs t élevées ont un impact plus important et plus fiable sur le modèle
-            - Les variables avec des valeurs t faibles pourraient être retirées du modèle sans affecter significativement sa qualité
-            - Dans le contexte IPMVP, privilégier les variables significatives permet d'obtenir un modèle plus robuste et plus facile à justifier
-            
-            **Note importante**
-            Dans le cas où le nombre d'observations est proche du nombre de variables, les valeurs t peuvent être moins fiables en raison du faible nombre de degrés de liberté.
-            """)
                 
         # 🔹 Tableau des résultats pour tous les modèles testés
         st.subheader("📋 Classement des modèles testés")
@@ -1782,7 +1498,7 @@ if df is not None and lancer_calcul:
             
             # Afficher jusqu'à 15 modèles pour donner une vue plus complète
             for i, model in enumerate(unique_models[:min(15, len(unique_models))]):
-                model_info = {
+                models_summary.append({
                     "Rang": i+1,
                     "Type": model['model_name'],
                     "Variables": ", ".join(model['features']),
@@ -1790,33 +1506,7 @@ if df is not None and lancer_calcul:
                     "CV(RMSE)": f"{model['cv_rmse']:.4f}",
                     "Biais (%)": f"{model['bias']:.2f}",
                     "Conformité": model['conformite']
-                }
-                
-                # Ajouter les valeurs t si disponibles
-                if 't_stats' in model and model['model_type'] in ["Linéaire", "Ridge", "Lasso"]:
-                    # Calculer la valeur t moyenne (valeur absolue) pour ce modèle
-                    t_values = []
-                    for feature in model['features']:
-                        if (feature in model['t_stats'] and model['t_stats'][feature] is not None):
-                            t_val = None
-                            if isinstance(model['t_stats'][feature], dict) and 't_value' in model['t_stats'][feature]:
-                                t_val = model['t_stats'][feature]['t_value']
-                            elif not isinstance(model['t_stats'][feature], dict):
-                                t_val = model['t_stats'][feature]
-                                
-                            if t_val is not None and (isinstance(t_val, float) or isinstance(t_val, int)):
-                                t_values.append(abs(t_val))
-                                
-                    if t_values:
-                        avg_t = sum(t_values) / len(t_values)
-                        model_info["t moyen"] = f"{avg_t:.2f}"
-                        
-                        # Calculer le pourcentage de variables significatives
-                        sig_count = sum(1 for t in t_values if t > 2)
-                        sig_pct = sig_count / len(t_values) * 100
-                        model_info["% Var. signif."] = f"{sig_pct:.0f}%"
-                
-                models_summary.append(model_info)
+                })
             
             st.table(pd.DataFrame(models_summary))
         else:
