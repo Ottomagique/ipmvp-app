@@ -910,7 +910,7 @@ if df is not None and lancer_calcul:
                                 r2 = r2_score(y, y_pred)
                                 
                                 # Calcul des métriques
-                                rmse = np.sqrt(mean_squared_error(y, y_pred))
+                                rmse = np.sqrt(np.sum((v_ref - v_pred)**2) / (n - p - 1))
                                 mae = mean_absolute_error(y, y_pred)
                                 cv_rmse = rmse / np.mean(y) if np.mean(y) != 0 else float('inf')
                                 bias = np.mean(y_pred - y) / np.mean(y) * 100
@@ -988,7 +988,7 @@ if df is not None and lancer_calcul:
                             r2 = r2_score(y, y_pred)
                             
                             # Calcul des métriques
-                            rmse = np.sqrt(mean_squared_error(y, y_pred))
+                            rmse = np.sqrt(np.sum((v_ref - v_pred)**2) / (n - p - 1))
                             mae = mean_absolute_error(y, y_pred)
                             cv_rmse = rmse / np.mean(y) if np.mean(y) != 0 else float('inf')
                             bias = np.mean(y_pred - y) / np.mean(y) * 100
@@ -1201,7 +1201,7 @@ if df is not None and lancer_calcul:
                         
                         # Calcul des métriques
                         r2 = r2_score(y, y_pred)
-                        rmse = np.sqrt(mean_squared_error(y, y_pred))
+                        rmse = np.sqrt(np.sum((v_ref - v_pred)**2) / (n - p - 1))
                         mae = mean_absolute_error(y, y_pred)
                         cv_rmse = rmse / np.mean(y) if np.mean(y) != 0 else float('inf')
                         bias = np.mean(y_pred - y) / np.mean(y) * 100
